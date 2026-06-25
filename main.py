@@ -100,6 +100,8 @@ async def startup():
 async def shutdown():
     await close_db_connection()
 
+router = APIRouter()
+app.include_router(router)
 @app.get("/events")
 async def get_all_events(conn=Depends(get_async_conn)):
     cache_key = "all_events"
@@ -139,8 +141,7 @@ async def get_all_events(conn=Depends(get_async_conn)):
     set_cached(cache_key, events)
 
     return events
-router = APIRouter()
-app.include_router(router)
+
 @router.get("/events/{id}")
 async def get_events_by_id(id: int, conn=Depends(get_async_conn)):
     # cache_key = "all_events"
@@ -186,6 +187,7 @@ async def get_events_by_id(id: int, conn=Depends(get_async_conn)):
         )
     
     return rows
+    
 
     
     #     "id": rows[0],

@@ -99,7 +99,7 @@ def test_specific_record_in_table_exists():
 def test_events_returns_all():
     conn = get_connection()
     seed(conn)
-    conn.close()
+    conn.cursor()
     with TestClient(app) as client:
         response = client.get("/events")
     assert response.status_code == 200
@@ -118,3 +118,21 @@ def test_events_returns_all():
         assert isinstance(event["organiser_id"], int)
         assert isinstance(event["venue_id"], int)
         assert isinstance(event["created_at"], str)
+
+
+
+def test_events_returns_by_id():
+    conn = get_connection()
+    seed(conn)
+    conn.close()
+    with TestClient(app) as client:
+        response = client.get("/events/1")
+        assert response.status_code == 200
+        response = client.get("/events/999999")
+        assert response.status_code == 404
+        assert response.json()["detail"]["code"] == "NOT_FOUND"
+        assert response.json()["detail"]["message"] == "Route not found" 
+        body = response.json()
+
+        assert isinstance(body, dict)
+        assert len(body) == 1
