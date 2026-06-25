@@ -1,5 +1,9 @@
 from main import seed
 from db.connection import get_connection
+from main import _cache
+
+def setup_function():
+    _cache.clear()
 
 
 def test_users_seeded():
