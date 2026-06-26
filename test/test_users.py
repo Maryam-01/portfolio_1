@@ -139,7 +139,7 @@ def test_new_user_created_returns_201():
         response = client.post("/auth/register",
                                json= {
                                 "name": "alice",
-                                "email": "alice@example.co.uk",
+                                "email": "alice@fake.co.uk",
                                 "password": "password123"
                                     })
         assert response.status_code == 201

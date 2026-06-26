@@ -222,9 +222,7 @@ async def get_events_by_id(id: int, conn=Depends(get_async_conn)):
 
 load_dotenv()
 
-JWT_EXPIRY_MINUTES = 30
-JWT_ALGORITHM = "HS256"
-JWT_SECRET= os.getenv("JWT_SECRET")
+
 
 class CredentialsRequest(BaseModel):
     email: str
@@ -337,19 +335,9 @@ async def register_user(payload: RegisterRequest, conn=Depends(get_async_conn)):
     
 
         
-    
-                
-
-                
-                            
-
-
-                              
-                
-
-
-
-
+JWT_EXPIRY_MINUTES = 30
+JWT_ALGORITHM = "HS256"
+JWT_SECRET= os.getenv("JWT_SECRET")
 
 
 def create_access_token(id: int) -> str:
@@ -359,7 +347,7 @@ def create_access_token(id: int) -> str:
     return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login")
 
-def get_event_id(token: str = Depends(oauth2_scheme)) -> int:
+def get_current_user_id(token: str = Depends(oauth2_scheme)) -> int:
     try:
         payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
         return int(payload["sub"])
@@ -369,8 +357,52 @@ def get_event_id(token: str = Depends(oauth2_scheme)) -> int:
         raise HTTPException(status_code=401, detail= "Could not validate token")
 
 
+@app.post("/api/events/{event_id}/rsvp", status_code=201)
+async def create_rsvp(
+    event_id: int,
+    user_id: int = Depends(get_current_user_id),
+    conn=Depends(get_async_conn)
 
+):
+    async with conn.transaction():
+        async with conn.cursor(row_factory=dict_row) as cur:
+            await cur.execute(
+                "SELECT id FROM events WHERE id = %s",
+                (event_id,)
+            )
+            event = await cur.fetchone()
 
+            if not event:
+                raise HTTPException(
+                    status_code= 404,
+                    detail= "Event not found"
+                )
+            
+            await cur.execute("""
+                              SELECT id FROM rsvp
+                              WHERE attendee_id = %s AND event_id = %s
+                              """,
+                              (user_id, event_id)
+                              )
+            existing_rsvp = await cur.fetchone()
+            if existing_rsvp:
+                raise HTTPException(
+                    status_code=409,
+                    detail="ALready RSVPed"
+                )
+            
+            await cur.execute(
+                """ 
+                INSERT INTO rsvp (attendee_id, event_id)
+                VALUES (%s, %s)
+                RETURNING id, attendee_id, event_id, created_at
+                """,
+                (user_id, event_id)
+
+            )
+
+            new_rsvp = await cur.fetchone()
+            return {"rsvp": new_rsvp}
 
 
 
