@@ -116,3 +116,30 @@ def test_user_email_and_password():
                                 "password": "password12"
                                })
         assert response.status_code == 401
+
+
+def test_new_user_created_returns_201():
+    conn = get_connection()
+    conn.close()
+    with TestClient(app) as client:
+        response = client.post("/auth/register",
+                               json= {
+                                "name": "alice",
+                                "email": "alice@example.com",
+                                "password": "password123"
+                                    })
+        assert response.status_code == 409
+        response = client.post("/auth/register",
+                               json= {
+                                "name": "",
+                                "email": "alice@example.com",
+                                "password": "password12"
+                               })
+        assert response.status_code == 400
+        response = client.post("/auth/register",
+                               json= {
+                                "name": "alice",
+                                "email": "alice@example.co.uk",
+                                "password": "password123"
+                                    })
+        assert response.status_code == 201

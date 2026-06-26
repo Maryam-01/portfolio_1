@@ -263,7 +263,10 @@ class CredentialsRequest(BaseModel):
 # DATABASE_URL = os.getenv("DATABASE_URL")
 
 
-
+class RegisterRequest(BaseModel):
+    name: str
+    email: str
+    password: str
 
 
 def verify_password(plain_password: str, hashed:str) -> bool:
@@ -291,6 +294,54 @@ async def login_user(payload: CredentialsRequest, conn=Depends(get_async_conn)):
                 "token_type": "bearer"
             }
 
+@app.post("/auth/register", status_code=201)
+async def register_user(payload: RegisterRequest, conn=Depends(get_async_conn)):
+    if not payload.email or not payload.password or not payload.name:
+        raise HTTPException(
+            status_code=400,
+            detail={"code": "Bad Request", "message": "Missing required field"}
+        )
+    hashed_password = hash_password(payload.password)
+    async with conn.transaction():
+        async with conn.cursor(row_factory=dict_row) as cur:
+                await cur.execute(
+                "SELECT id FROM users WHERE email = %s",
+                (payload.email,)
+            )
+                existing_user = await cur.fetchone()
+
+                if existing_user:
+                    raise HTTPException(
+                    status_code=409,
+                    detail="Email already registered"
+                )
+
+                
+                await cur.execute(
+                    """
+                
+            INSERT INTO users (name, email, password)
+            VALUES (%s, %s, %s)
+            RETURNING id, name, email, created_at;
+            """,
+            (payload.name, payload.email, hashed_password)
+            )
+                
+
+
+                new_user = await cur.fetchone()
+
+
+                
+                return new_user
+    
+
+        
+    
+                
+
+                
+                            
 
 
                               
