@@ -4,12 +4,22 @@ from db.seeds.rsvp_seed import drop_rsvp, create_rsvp, seed_rsvp
 from db.seeds.users_seed import drop_users, create_users, seed_users
 from db.seeds.venues_seed import drop_venues, create_venues, seed_venues
 import os
+from pydantic import BaseModel
+from dotenv import load_dotenv
 from psycopg.rows import dict_row
 from fastapi import APIRouter, Depends, HTTPException, FastAPI
+from fastapi.security import OAuth2PasswordBearer
 from app.events_app import AsyncConnectionPool, get_async_conn, connect_to_db, close_db_connection
-
+import bcrypt
+import jwt
+from datetime import datetime, timezone, timedelta
+import asyncio
 import time
 import psycopg
+import bcrypt
+from db.seeds.utils import hash_password, verify_password
+
+
 
 
 
@@ -208,10 +218,111 @@ async def get_events_by_id(id: int, conn=Depends(get_async_conn)):
     # set_cached(cache_key, events)
 
 
+ ### auth login #####
+
+load_dotenv()
+
+JWT_EXPIRY_MINUTES = 30
+JWT_ALGORITHM = "HS256"
+JWT_SECRET= os.getenv("JWT_SECRET")
+
+class CredentialsRequest(BaseModel):
+    email: str
+    password: str
+
+
+
+
+# DATABASE_URL = os.getenv("DATABASE_URL")
+
+
+
+
+# @app.post("/auth/register")
+# async def register_user(payload: CredentialsRequest, conn=Depends(get_async_conn)):
+#     async with conn.transaction():
+#         async with conn.cursor() as cur:
+
+#             # ✅ HASH THE PASSWORD HERE
+#             hashed_password = hash_password(payload.password)
+
+#             await cur.execute(
+#                 """
+#                 INSERT INTO users (email, password)
+#                 VALUES (%s, %s)
+#                 """,
+#                 (payload.email, hashed_password)
+#             )
+
+#     return {"message": "User registered successfully"}
+
+
+
+
+# load_dotenv()
+# DATABASE_URL = os.getenv("DATABASE_URL")
+
+
+
+
+
+def verify_password(plain_password: str, hashed:str) -> bool:
+    return bcrypt.checkpw(plain_password.encode(), hashed.encode())
+
+
+
+@app.post("/auth/login")
+async def login_user(payload: CredentialsRequest, conn=Depends(get_async_conn)):
+    async with conn.transaction():
+        async with conn.cursor(row_factory=dict_row) as cur:
+            await cur.execute(
+                "SELECT id, password FROM users WHERE email = %s",
+                (payload.email,),
+            )
+            user = await cur.fetchone()
+
+            if user is None or not verify_password(payload.password, user["password"]):
+                raise HTTPException(status_code=401, detail="invalid email or password")
+
+            token = create_access_token(user["id"])
+
+            return {
+                "access_token": token,
+                "token_type": "bearer"
+            }
+
+
+
+                              
                 
 
 
-    
+
+
+
+
+def create_access_token(id: int) -> str:
+    expire = datetime.now(timezone.utc) + timedelta(minutes=JWT_EXPIRY_MINUTES)
+    payload = {"sub": str(id), 
+               "exp": expire}
+    return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login")
+
+def get_event_id(token: str = Depends(oauth2_scheme)) -> int:
+    try:
+        payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+        return int(payload["sub"])
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(status_code=401, detail="Token has expired")
+    except jwt.InvalidTokenError:
+        raise HTTPException(status_code=401, detail= "Could not validate token")
+
+
+
+
+
+
+
 
 
 

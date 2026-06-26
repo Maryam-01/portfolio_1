@@ -1,6 +1,7 @@
 from main import seed
 from db.connection import get_connection
-from main import _cache
+from main import _cache, app
+from fastapi.testclient import TestClient
 
 def setup_function():
     _cache.clear()
@@ -98,3 +99,20 @@ def test_specific_user_exists():
 
     cur.close()
     conn.close()
+
+def test_user_email_and_password():
+    conn = get_connection()
+    conn.close()
+    with TestClient(app) as client:
+        response = client.post("/auth/login",
+                               json= {
+                                "email": "alice@example.com",
+                                "password": "password123"
+                                    })
+        assert response.status_code == 200
+        response = client.post("/auth/login",
+                               json= {
+                                "email": "alice@example.com",
+                                "password": "password12"
+                               })
+        assert response.status_code == 401
