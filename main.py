@@ -18,6 +18,7 @@ import time
 import psycopg
 import bcrypt
 from db.seeds.utils import hash_password, verify_password
+router = APIRouter()
 
 
 
@@ -27,18 +28,18 @@ from db.seeds.utils import hash_password, verify_password
 def seed(conn):
     cur = conn.cursor()
 
+    # DROP in dependency order (children first)
     drop_rsvp(cur)
     drop_events(cur)
-    drop_venues(cur)
     drop_users(cur)
 
+    # CREATE in dependency order (parents first)
     create_users(cur)
-    create_venues(cur)
     create_events(cur)
     create_rsvp(cur)
 
+    # SEED in dependency order
     seed_users(cur)
-    seed_venues(cur)
     seed_events(cur)
     seed_rsvp(cur)
 
@@ -89,7 +90,7 @@ def set_cached(key: str, value):
     _cache[key] = (time.time(), value)
 
 
-app = FastAPI()
+# app = FastAPI()
 
 
 
@@ -102,54 +103,91 @@ app = FastAPI()
 
 
 
-@app.on_event("startup")
-async def startup():
-    await connect_to_db()
+# @app.on_event("startup")
+# async def startup():
+#     await connect_to_db()
 
-@app.on_event("shutdown")
-async def shutdown():
-    await close_db_connection()
+# @app.on_event("shutdown")
+# async def shutdown():
+#     await close_db_connection()
 
-router = APIRouter()
-app.include_router(router)
-@app.get("/events")
+# router = APIRouter()
+# app.include_router(router)
+# @app.get("/events")
+# async def get_all_events(conn=Depends(get_async_conn)):
+#     cache_key = "all_events"
+#     cached_events = get_cached(cache_key)
+
+#     if cached_events is not None:
+        
+#         return cached_events
+
+#     print("Cache miss")
+
+#     async with conn.transaction():
+#         async with conn.cursor() as cur:
+#             await cur.execute(
+#                 """
+#                 SELECT id, title, description, starts_at, ends_at, organiser_id, venue_id, created_at
+#                 FROM events
+#                 ORDER BY starts_at ASC;
+
+#                 """,
+                
+#             )
+#             rows = await cur.fetchall()
+#     events = [
+#     {
+#         "id": row["id"],
+#         "title": row["title"],
+#         "description": row["description"],
+#         "starts_at": row["starts_at"],
+#         "ends_at": row["ends_at"],
+#         "organiser_id": row["organiser_id"],
+#         "venue_id": row["venue_id"],
+#         "created_at": row["created_at"],
+#     }
+#         for row in rows
+#     ]
+#     set_cached(cache_key, events)
+
+#     return events
+
+
+@router.get("/events")
 async def get_all_events(conn=Depends(get_async_conn)):
     cache_key = "all_events"
     cached_events = get_cached(cache_key)
 
     if cached_events is not None:
-        
         return cached_events
 
-    print("Cache miss")
+    async with conn.cursor(row_factory=dict_row) as cur:
+        await cur.execute(
+            """
+            SELECT id, title, description, starts_at, ends_at,
+                   organiser_id, venue_id, created_at
+            FROM events
+            ORDER BY starts_at ASC;
+            """
+        )
+        rows = await cur.fetchall()
 
-    async with conn.transaction():
-        async with conn.cursor() as cur:
-            await cur.execute(
-                """
-                SELECT id, title, description, starts_at, ends_at, organiser_id, venue_id, created_at
-                FROM events
-                ORDER BY starts_at ASC;
-
-                """,
-                
-            )
-            rows = await cur.fetchall()
     events = [
-    {
-        "id": row["id"],
-        "title": row["title"],
-        "description": row["description"],
-        "starts_at": row["starts_at"],
-        "ends_at": row["ends_at"],
-        "organiser_id": row["organiser_id"],
-        "venue_id": row["venue_id"],
-        "created_at": row["created_at"],
-    }
+        {
+            "id": row["id"],
+            "title": row["title"],
+            "description": row["description"],
+            "starts_at": row["starts_at"],
+            "ends_at": row["ends_at"],
+            "organiser_id": row["organiser_id"],
+            "venue_id": row["venue_id"],
+            "created_at": row["created_at"],
+        }
         for row in rows
     ]
-    set_cached(cache_key, events)
 
+    set_cached(cache_key, events)
     return events
 
 @router.get("/events/{id}")
@@ -257,7 +295,7 @@ class CredentialsRequest(BaseModel):
 
 
 
-# load_dotenv()
+load_dotenv()
 # DATABASE_URL = os.getenv("DATABASE_URL")
 
 
@@ -272,7 +310,7 @@ def verify_password(plain_password: str, hashed:str) -> bool:
 
 
 
-@app.post("/auth/login")
+@router.post("/auth/login")
 async def login_user(payload: CredentialsRequest, conn=Depends(get_async_conn)):
     async with conn.transaction():
         async with conn.cursor(row_factory=dict_row) as cur:
@@ -292,7 +330,7 @@ async def login_user(payload: CredentialsRequest, conn=Depends(get_async_conn)):
                 "token_type": "bearer"
             }
 
-@app.post("/auth/register", status_code=201)
+@router.post("/auth/register", status_code=201)
 async def register_user(payload: RegisterRequest, conn=Depends(get_async_conn)):
     if not payload.email or not payload.password or not payload.name:
         raise HTTPException(
@@ -357,13 +395,10 @@ def get_current_user_id(token: str = Depends(oauth2_scheme)) -> int:
         raise HTTPException(status_code=401, detail= "Could not validate token")
 
 
-@app.post("/api/events/{event_id}/rsvp", status_code=201)
-async def create_rsvp(
-    event_id: int,
-    user_id: int = Depends(get_current_user_id),
-    conn=Depends(get_async_conn)
+@router.post("/api/events/{event_id}/rsvp", status_code=201)
+async def create_rsvp_by_authentication(event_id: int, user_id: int = Depends(get_current_user_id),conn=Depends(get_async_conn)):
 
-):
+    
     async with conn.transaction():
         async with conn.cursor(row_factory=dict_row) as cur:
             await cur.execute(
@@ -403,9 +438,50 @@ async def create_rsvp(
 
             new_rsvp = await cur.fetchone()
             return {"rsvp": new_rsvp}
+        
+
+@router.delete("/api/events/events/{event_id}/rsvp/me", status_code=204)
+async def delete_rsvp_by_authentication(event_id: int, user_id: int = Depends(get_current_user_id),conn=Depends(get_async_conn)):
+
+    
+    async with conn.transaction():
+        async with conn.cursor(row_factory=dict_row) as cur:
+            await cur.execute(
+                """SELECT id FROM rsvp
+                   WHERE attendee_id = %s AND event_id = %s
+                   """,
+                   (user_id, event_id)
+            )
+            existing = await cur.fetchone()
+
+            if not existing:
+                raise HTTPException(
+                    status_code=404,
+                    detail="RSVP not found"
+                )
+            await cur.execute(
+                """ DELETE FROM rsvp
+                    WHERE attendee_id = %s, AND event_id = %s
+                    """,
+                    (user_id, event_id)
+            )
+
+def create_app():
+    app = FastAPI()
+
+    @app.on_event("startup")
+    async def startup():
+        await connect_to_db()
+
+    @app.on_event("shutdown")
+    async def shutdown():
+        await close_db_connection()
+
+    app.include_router(router)
+    return app
 
 
-
+app = create_app()
 
 
 

@@ -1,9 +1,9 @@
 
-from main import seed
+from main import seed, app
 from db.connection import get_connection
-
+from main import create_app
 from fastapi.testclient import TestClient
-from main import app, get_all_events
+
 
 
 
@@ -96,30 +96,42 @@ def test_specific_record_in_table_exists():
 
 
 
+# def test_events_returns_all():
+#     conn = get_connection()
+#     seed(conn)
+#     conn.cursor()
+#     with TestClient(app) as client:
+#         response = client.get("/events")
+#     assert response.status_code == 200
+
+#     body = response.json()
+
+#     assert isinstance(body, list)
+#     assert len(body) == 10
+
+#     for event in body:
+#         assert isinstance(event["id"], int)
+#         assert isinstance(event["title"], str)
+#         assert event["description"] is None or isinstance(event["description"], str)
+#         assert isinstance(event["starts_at"], str)
+#         assert isinstance(event["ends_at"], str)
+#         assert isinstance(event["organiser_id"], int)
+#         assert isinstance(event["venue_id"], int)
+#         assert isinstance(event["created_at"], str)
+
+
+
+
 def test_events_returns_all():
     conn = get_connection()
     seed(conn)
-    conn.cursor()
+    conn.close()
+
+    app = create_app()
+
     with TestClient(app) as client:
         response = client.get("/events")
-    assert response.status_code == 200
-
-    body = response.json()
-
-    assert isinstance(body, list)
-    assert len(body) == 10
-
-    for event in body:
-        assert isinstance(event["id"], int)
-        assert isinstance(event["title"], str)
-        assert event["description"] is None or isinstance(event["description"], str)
-        assert isinstance(event["starts_at"], str)
-        assert isinstance(event["ends_at"], str)
-        assert isinstance(event["organiser_id"], int)
-        assert isinstance(event["venue_id"], int)
-        assert isinstance(event["created_at"], str)
-
-
+        assert response.status_code == 200
 
 def test_events_returns_by_id():
     conn = get_connection()
@@ -136,3 +148,4 @@ def test_events_returns_by_id():
 
         assert isinstance(body, dict)
         assert len(body) == 1
+

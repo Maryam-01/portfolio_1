@@ -120,6 +120,7 @@ def test_user_email_and_password():
 
 def test_new_user_created_returns_201():
     conn = get_connection()
+    seed(conn)
     conn.close()
     with TestClient(app) as client:
         response = client.post("/auth/register",
