@@ -18,6 +18,11 @@ import time
 import psycopg
 import bcrypt
 from db.seeds.utils import hash_password, verify_password
+from fastapi import FastAPI, status
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
+
+
 router = APIRouter()
 
 
@@ -461,10 +466,229 @@ async def delete_rsvp_by_authentication(event_id: int, user_id: int = Depends(ge
                 )
             await cur.execute(
                 """ DELETE FROM rsvp
-                    WHERE attendee_id = %s, AND event_id = %s
+                    WHERE attendee_id = %s AND event_id = %s
                     """,
                     (user_id, event_id)
             )
+
+class EventCreate(BaseModel):
+    title: str
+    description: str
+    starts_at: datetime
+    ends_at: datetime
+    venue_id: int
+
+
+
+@router.post("/api/events", status_code=201)
+async def create_a_new_event_by_authenticated_user(event: EventCreate, organiser_id: int = Depends(get_current_user_id),conn=Depends(get_async_conn)):
+
+    
+    async with conn.transaction():
+        async with conn.cursor(row_factory=dict_row) as cur:
+            await cur.execute("""
+                INSERT INTO events (
+                            title, 
+                            description, 
+                            starts_at, 
+                            ends_at, 
+                            venue_id,
+                            organiser_id
+                            )
+                   VALUES (%s, %s, %s, %s, %s, %s)
+                   RETURNING id, 
+                              title,
+                              description,
+                              starts_at,
+                              ends_at,
+                              venue_id,
+                              organiser_id,
+                              created_at
+                              """,
+                        (event.title,
+                         event.description,
+                         event.starts_at,
+                         event.ends_at,
+                         event.venue_id,
+                         organiser_id)
+            )
+        
+        
+
+
+            new_event = await cur.fetchone()
+            return {"event": new_event}
+        
+class EventUpdate(BaseModel):
+    title: str | None = None
+    description: str | None = None
+    starts_at: datetime | None = None
+    ends_at: datetime | None = None
+    venue_id: datetime | None = None
+
+@router.patch("/api/events/{event_id}", status_code=200)
+async def update_event(
+    event_id: int,
+    event: EventUpdate,
+    organiser_id: int = Depends(get_current_user_id),
+    conn = Depends(get_async_conn)
+):
+
+    async with conn.transaction():
+        async with conn.cursor(row_factory=dict_row) as cur:
+
+            
+            await cur.execute(
+                "SELECT * FROM events WHERE id = %s",
+                (event_id,)
+            )
+            existing_event = await cur.fetchone()
+
+            if not existing_event:
+                raise HTTPException(status_code=404, detail="Event not found")
+
+           
+            if existing_event["organiser_id"] != organiser_id:
+                raise HTTPException(status_code=403, detail="Not authorised")
+
+            
+            update_data = event.model_dump(exclude_unset=True)
+
+            if not update_data:
+                raise HTTPException(status_code=400, detail="No fields provided")
+
+            
+            new_starts = update_data.get("starts_at", existing_event["starts_at"])
+            new_ends = update_data.get("ends_at", existing_event["ends_at"])
+
+            if new_ends <= new_starts:
+                raise HTTPException(status_code=400, detail="Invalid date range")
+
+            
+            fields = []
+            values = []
+
+            for key, value in update_data.items():
+                fields.append(f"{key} = %s")
+                values.append(value)
+
+            set_clause = ", ".join(fields)
+
+            
+            await cur.execute(
+                f"""
+                UPDATE events
+                SET {set_clause}
+                WHERE id = %s
+                RETURNING id,
+                          title,
+                          description,
+                          starts_at,
+                          ends_at,
+                          venue_id,
+                          organiser_id,
+                          created_at
+                """,
+                values + [event_id]
+            )
+
+            updated_event = await cur.fetchone()
+
+    return {"event": updated_event}
+
+@router.get("/api/events/{event_id}/attendees", status_code=200)
+async def get_attendees_for_authenticated_user(
+    event_id: int,
+    organiser_id: int = Depends(get_current_user_id),
+    conn = Depends(get_async_conn)
+):
+            
+
+            async with conn.transaction():
+                async with conn.cursor(row_factory=dict_row) as cur:
+
+                        await cur.execute(
+                            "SELECT organiser_id FROM events WHERE id = %s",
+                            (event_id,)
+                    )
+                        organiser = await cur.fetchone()
+
+                        if organiser is None:
+                            raise HTTPException(status_code=404)
+
+
+                
+                        if organiser["organiser_id"] != organiser_id:
+                            raise HTTPException(status_code=403, detail="Not authorised")
+                        await cur.execute(
+                                """
+                                SELECT users.id,
+                                users.name,
+                                users.email
+                                
+
+                                    
+                                FROM users
+                                JOIN rsvp
+                                ON users.id = rsvp.attendee_id
+                                WHERE rsvp.event_id = %s
+                                
+                                """,
+                                (event_id,)
+                            )
+                                    
+
+
+                        rows = await cur.fetchall()
+
+
+
+
+                        return {"attendees": rows}
+
+
+
+@router.get("/api/user/me/events", status_code=200)
+async def get_all_events_where_authorised_user_rsvped(
+    organiser_id: int = Depends(get_current_user_id),
+    conn = Depends(get_async_conn)
+
+):
+
+
+
+    async with conn.cursor(row_factory=dict_row) as cur:
+        await cur.execute(
+                                 """
+                                    SELECT
+                                        e.id,
+                                        e.title,
+                                        e.starts_at,
+                                        r_user.created_at AS rsvp_date,
+                                        COUNT(r_all.id) AS total_rsvps,
+                                        ROW_NUMBER() OVER (ORDER BY e.starts_at ASC) AS event_rank
+                                    FROM events e
+                                    JOIN rsvp r_user
+                                        ON e.id = r_user.event_id
+                                    JOIN rsvp r_all
+                                        ON e.id = r_all.event_id
+                                    WHERE r_user.attendee_id = %s
+                                    GROUP BY
+                                        e.id,
+                                        e.title,
+                                        e.starts_at,
+                                        r_user.created_at
+                                    ORDER BY e.starts_at ASC;
+                                
+                                """, (organiser_id,)
+        )
+        rows = await cur.fetchall()
+
+        return {"attendees": rows}
+
+
+
+
 
 def create_app():
     app = FastAPI()
@@ -476,6 +700,15 @@ def create_app():
     @app.on_event("shutdown")
     async def shutdown():
         await close_db_connection()
+
+    @app.exception_handler(RequestValidationError)
+    async def validation_exception_handler(request, exc):
+        return JSONResponse(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            content={"detail": "Invalid request data"},
+        )
+
+    app.include_router(router)
 
     app.include_router(router)
     return app
