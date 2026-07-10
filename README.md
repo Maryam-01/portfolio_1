@@ -315,3 +315,18 @@ http://<EC2_PUBLIC_IP>:8000
 
 Example:
 http://18.175.xx.xx:8000
+
+## RDS Configuration
+
+- Engine: PostgreSQL 14
+- Instance class: db.t3.micro (Free Tier eligible)
+- Storage: 20GB (Free Tier eligible)
+- Publicly accessible: No
+- Access restricted to EC2 security group only
+- Password supplied via terraform.tfvars (not committed)
+
+## Terraform Outputs
+
+- EC2 Public IP
+- RDS Endpoint
+- RDS Port

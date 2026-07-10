@@ -70,6 +70,26 @@ egress {
 
 }
 
+data "aws_vpc" "default" {
+  default = true
+}
+
+data "aws_subnets" "default" {
+  filter {
+    name   = "vpc-id"
+    values = [data.aws_vpc.default.id]
+  }
+}
+
+resource "aws_db_subnet_group" "default" {
+  name       = "postgres-subnet-group"
+  subnet_ids = data.aws_subnets.default.ids
+
+  tags = {
+    Name = "Postgres subnet group"
+  }
+}
+
 resource "aws_security_group" "allow_http" {
     name = "allow_http"
     description = "allow FASTAPI traffic"
@@ -91,10 +111,10 @@ egress {
 }
 }
 
-resource "aws_security_group" "allow_postgres_traffic"{
+resource "aws_security_group" "allow_postgres_traffic" {
     name = "allow-allow_postgres_traffic"
     description = "allow postgreSQL traffic only"
-}
+
 ingress {
     from_port = 5432
     to_port = 5432
@@ -105,7 +125,8 @@ egress {
     from_port = 0
     to_port = 0
     protocol = "-1"
-    cidr_blocks = [0.0.0.0/0"]
+    cidr_blocks = ["0.0.0.0/0"]
+}
 }
 
 resource "aws_db_instance" "db-test1" {
@@ -117,13 +138,13 @@ resource "aws_db_instance" "db-test1" {
     instance_class = "db.t3.micro"
     username = "postgres"
     password = var.db_password
-    vpc_security_group_ids = [aws_secret_group.allow_postgres_traffic.id]
+    vpc_security_group_ids = [aws_security_group.allow_postgres_traffic.id]
     publicly_accessible = false
     skip_final_snapshot = true
 }
 
 output "rds_endpoint" {
-    value = aws_db_instance.db-test1.rds_endpoint
+    value = aws_db_instance.db-test1.endpoint
 
 }
 
