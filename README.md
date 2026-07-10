@@ -292,5 +292,26 @@ The application:
 - The S3 Bucket must be unique
 - Replace the bucket name in backend.tf with a unique name in your AWS account before running 'terraform init'
 
+## EC2 Configuration
 
+- Instance Type: t2.micro (AWS Free Tier eligible)
+- Operating System: Ubuntu Server 22.04 LTS (Latest Stable)
+- AMI Source: AWS SSM Parameter Store (Canonical official Ubuntu AMI)
+- Region: eu-west-2
 
+## EC2 Deployment
+
+- Instance Type: t3.micro (Free Tier eligible)
+- OS: Ubuntu 22.04 LTS
+- FastAPI running on port 8000
+- HTTP security group allows 0.0.0.0/0 on port 8000
+- SSH restricted to my IP
+
+## Accessing the API
+
+The API can be accessed at:
+
+http://<EC2_PUBLIC_IP>:8000
+
+Example:
+http://18.175.xx.xx:8000
