@@ -33,17 +33,20 @@ router = APIRouter()
 def seed(conn):
     cur = conn.cursor()
 
-    # DROP in dependency order (children first)
+    # DROP (children first)
     drop_rsvp(cur)
     drop_events(cur)
     drop_users(cur)
+    drop_venues(cur)
 
-    # CREATE in dependency order (parents first)
+    # CREATE (parents first)
+    create_venues(cur)
     create_users(cur)
     create_events(cur)
     create_rsvp(cur)
 
-    # SEED in dependency order
+    # SEED (parents first)
+    seed_venues(cur)
     seed_users(cur)
     seed_events(cur)
     seed_rsvp(cur)
@@ -51,15 +54,7 @@ def seed(conn):
     conn.commit()
     cur.close()
 
-
-
     print("✅ Database seeded successfully")
-
-
-if __name__ == "__main__":
-    conn = get_connection()
-    seed(conn)
-    conn.close()
 
 
 ## returns all events list 

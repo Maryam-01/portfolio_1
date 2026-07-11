@@ -3,20 +3,26 @@ resource "aws_instance" "example" {
   instance_type = "t3.micro"
 
   key_name = "MA-7"
-  vpc_security_group_ids = [
-    aws_security_group.ssh_only.id,
-    aws_security_group.allow_http.id
-    ]
+  associate_public_ip_address = true
+  vpc_security_group_ids = [aws_security_group.ssh_only.id, 
+  aws_security_group.allow_http.id]
 
 user_data = <<-EOF
 #!/bin/bash
 exec > /home/ubuntu/progress.txt 2>&1
 
-REPO_URL="https://github.com/lewispricey/HelloFromTheS3Side.git"
+REPO_URL="https://github.com/Maryam-01/portfolio_1.git"
 APP_DIR="/home/ubuntu/app"
 
+export DB_HOST="${aws_db_instance.db-test1.address}"
+export DB_PORT="${aws_db_instance.db-test1.port}"
+export DB_NAME="postgres"
+export DB_USER="postgres"
+export DB_PASSWORD="${var.db_password}"
+
+export DATABASE_URL="postgresql://$${DB_USER}:$${DB_PASSWORD}@$${DB_HOST}:$${DB_PORT}/$${DB_NAME}"
+
 apt update -y
-apt upgrade -y
 apt install -y python3 python3-pip python3-venv git
 
 git clone $REPO_URL $APP_DIR
@@ -26,10 +32,28 @@ python3 -m venv venv
 venv/bin/pip install --upgrade pip
 venv/bin/pip install -r requirements.txt
 
-nohup venv/bin/uvicorn src.app:app --host 0.0.0.0 --port 8000 &
-EOF
+# ---- Seed Database ----
+echo "Seeding database..."
+env \
+    DATABASE_URL=$${DATABASE_URL} \
+    DB_HOST=$${DB_HOST} \
+    DB_PORT=$${DB_PORT} \
+    DB_NAME=$${DB_NAME} \
+    DB_USER=$${DB_USER} \
+    DB_PASSWORD=$${DB_PASSWORD} \
+venv/bin/python main.py
 
-user_data_replace_on_change = true
+# ---- Start API ----
+echo "Starting FastAPI..."
+nohup env \
+    DATABASE_URL=$${DATABASE_URL} \
+    DB_HOST=$${DB_HOST} \
+    DB_PORT=$${DB_PORT} \
+    DB_NAME=$${DB_NAME} \
+    DB_USER=$${DB_USER} \
+    DB_PASSWORD=$${DB_PASSWORD} \
+venv/bin/uvicorn main:app --host 0.0.0.0 --port 8000 &
+EOF
 
 
   tags = {
@@ -56,7 +80,7 @@ ingress {
     from_port = 22
     to_port = 22
     protocol = "tcp"
-    cidr_blocks = ["87.117.231.69/32"]
+    cidr_blocks = ["82.6.15.214/32"]
 }
 
 egress {
