@@ -17,6 +17,8 @@ from db.seeds.utils import hash_password, verify_password
 from fastapi import FastAPI, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from dotenv import load_dotenv
+load_dotenv()
 
 
 router = APIRouter()
