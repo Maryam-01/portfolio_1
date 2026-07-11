@@ -51,7 +51,7 @@ echo "Starting FastAPI..."
 
 nohup env \
   DATABASE_URL="${DATABASE_URL}" \
-  JWT_SECRET="${JWT_SECRET}" \
+  JWT_SECRET="$${JWT_SECRET}" \
   venv/bin/uvicorn main:app --host 0.0.0.0 --port 8000 \
   > /home/ubuntu/app.log 2>&1 &
 EOF
