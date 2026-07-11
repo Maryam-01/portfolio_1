@@ -4,8 +4,9 @@ resource "aws_instance" "example" {
 
   key_name = "MA-7"
   associate_public_ip_address = true
-  vpc_security_group_ids = [aws_security_group.ssh_only.id, 
-  aws_security_group.allow_http.id]
+  vpc_security_group_ids = [
+  aws_security_group.ec2_app.id
+]
 
 user_data = <<-EOF
 #!/bin/bash
@@ -22,14 +23,14 @@ DB_USER="postgres"
 DB_PASSWORD="${var.db_password}"
 JWT_SECRET="super_secret_jwt_key"
 
-DATABASE_URL="postgresql://${DB_USER}:${DB_PASSWORD}@${DB_HOST}:${DB_PORT}/${DB_NAME}"
+DATABASE_URL="postgresql://$${DB_USER}:$${DB_PASSWORD}@$${DB_HOST}:$${DB_PORT}/$${DB_NAME}"
 
 apt update -y
 apt install -y python3 python3-pip python3-venv git
 
-rm -rf ${APP_DIR}
-git clone ${REPO_URL} ${APP_DIR}
-cd ${APP_DIR}
+rm -rf $${APP_DIR}
+git clone $${REPO_URL} $${APP_DIR}
+cd $${APP_DIR}
 
 python3 -m venv venv
 venv/bin/pip install --upgrade pip
@@ -39,6 +40,11 @@ echo "Seeding database..."
 
 env \
   DATABASE_URL="$${DATABASE_URL}" \
+  DB_HOST="$${DB_HOST}" \
+  DB_PORT="$${DB_PORT}" \
+  DB_NAME="$${DB_NAME}" \
+  DB_USER="$${DB_USER}" \
+  DB_PASSWORD="$${DB_PASSWORD}" \
   JWT_SECRET="$${JWT_SECRET}" \
   venv/bin/python seed.py
 
@@ -46,6 +52,11 @@ echo "Starting FastAPI..."
 
 nohup env \
   DATABASE_URL="$${DATABASE_URL}" \
+  DB_HOST="$${DB_HOST}" \
+  DB_PORT="$${DB_PORT}" \
+  DB_NAME="$${DB_NAME}" \
+  DB_USER="$${DB_USER}" \
+  DB_PASSWORD="$${DB_PASSWORD}" \
   JWT_SECRET="$${JWT_SECRET}" \
   venv/bin/uvicorn main:app --host 0.0.0.0 --port 8000 \
   > /home/ubuntu/app.log 2>&1 &
@@ -64,31 +75,7 @@ output "ec2_ip" {
   value = aws_instance.example.public_ip
 }
 
-resource "aws_security_group" "ssh_only" {
-    name = "allow_ssh"
-    description = "allow ssh"
 
-
-
-
-ingress {
-    
-    from_port = 22
-    to_port = 22
-    protocol = "tcp"
-    cidr_blocks = ["82.6.15.214/32"]
-}
-
-egress {
-
-    from_port = 0
-    to_port = 0
-    protocol = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
-}
-
-
-}
 
 data "aws_vpc" "default" {
   default = true
@@ -110,37 +97,18 @@ resource "aws_db_subnet_group" "default" {
   }
 }
 
-resource "aws_security_group" "allow_http" {
-    name = "allow_http"
-    description = "allow FASTAPI traffic"
 
-ingress {
-    
-    from_port = 8000
-    to_port = 8000
-    protocol = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-}
-
-egress {
-
-    from_port = 0
-    to_port = 0
-    protocol = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
-}
-}
 
 resource "aws_security_group" "allow_postgres_traffic" {
-    name = "allow-allow_postgres_traffic"
-    description = "allow postgreSQL traffic only"
+  name        = "allow-postgres-traffic"
+  description = "allow postgreSQL traffic only"
 
 ingress {
-    from_port = 5432
-    to_port = 5432
-    protocol = "tcp"
-    security_groups = [aws_security_group.ssh_only.id]
-}
+    from_port       = 5432
+    to_port         = 5432
+    protocol        = "tcp"
+    security_groups = [aws_security_group.ec2_app.id]
+  }
 egress {
     from_port = 0
     to_port = 0
@@ -170,4 +138,34 @@ output "rds_endpoint" {
 
 output "rds_port" {
     value = aws_db_instance.db-test1.port
+}
+
+# -------------------
+# SECURITY GROUPS
+# -------------------
+
+resource "aws_security_group" "ec2_app" {
+  name        = "ec2_app_sg"
+  description = "Security group for EC2 app"
+
+  ingress {
+    from_port   = 8000
+    to_port     = 8000
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  ingress {
+    from_port   = 22
+    to_port     = 22
+    protocol    = "tcp"
+    cidr_blocks = ["82.6.15.214/32"]
+  }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
 }
