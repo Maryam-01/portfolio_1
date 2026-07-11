@@ -15,7 +15,6 @@ exec > /home/ubuntu/progress.txt 2>&1
 REPO_URL="https://github.com/Maryam-01/portfolio_1.git"
 APP_DIR="/home/ubuntu/app"
 
-# ---- Database values from Terraform ----
 DB_HOST="${aws_db_instance.db-test1.address}"
 DB_PORT="${aws_db_instance.db-test1.port}"
 DB_NAME="postgres"
@@ -25,32 +24,28 @@ JWT_SECRET="super_secret_jwt_key"
 
 DATABASE_URL="postgresql://${DB_USER}:${DB_PASSWORD}@${DB_HOST}:${DB_PORT}/${DB_NAME}"
 
-# ---- Install dependencies ----
 apt update -y
 apt install -y python3 python3-pip python3-venv git
 
-# ---- Clone repository ----
+rm -rf ${APP_DIR}
 git clone ${REPO_URL} ${APP_DIR}
 cd ${APP_DIR}
 
-# ---- Setup virtual environment ----
 python3 -m venv venv
 venv/bin/pip install --upgrade pip
 venv/bin/pip install -r requirements.txt
 
-# ---- Seed Database ----
 echo "Seeding database..."
 
 env \
-  DATABASE_URL="${DATABASE_URL}" \
-  JWT_SECRET="${JWT_SECRET}" \
+  DATABASE_URL="$${DATABASE_URL}" \
+  JWT_SECRET="$${JWT_SECRET}" \
   venv/bin/python seed.py
 
-# ---- Start FastAPI ----
 echo "Starting FastAPI..."
 
 nohup env \
-  DATABASE_URL="${DATABASE_URL}" \
+  DATABASE_URL="$${DATABASE_URL}" \
   JWT_SECRET="$${JWT_SECRET}" \
   venv/bin/uvicorn main:app --host 0.0.0.0 --port 8000 \
   > /home/ubuntu/app.log 2>&1 &
